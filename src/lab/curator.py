@@ -4,9 +4,12 @@ Pseudo-code: guides/pseudocode/04_curator.md
 Kiểm tra:    pytest tests/test_04_curator.py
 Chạy thật:   python -m lab.curator
 """
+import json
 import re
 from pathlib import Path
 
+from .model import make_model
+from .tasks import ROOT, get_task
 from .tasks import eval_markers   # có sẵn: định danh của tác vụ đánh giá, tính lúc chạy
 
 # ---- CÓ SẴN, KHÔNG SỬA: kiểm tra và tách khối skill (phần dễ sai và liên quan bảo mật) ----------------
@@ -68,7 +71,94 @@ def curate_skills(results_dir="results", source_condition="baseline", out_dir=No
     model mặc định: make_model() (lab.model).
     Trả về: danh sách đường dẫn SKILL.md đã ghi.
     """
-    raise NotImplementedError("TODO: cài đặt curate_skills (xem guides/pseudocode/04_curator.md)")
+    out_dir = Path(out_dir) if out_dir is not None else ROOT / "skills" / "auto"
+    runs = []
+    for run_file in sorted(Path(results_dir, source_condition).glob("*/run.json")):
+        r = json.loads(run_file.read_text(encoding="utf-8"))
+        if r.get("role") != "learn":                      # tuyệt đối không dùng dữ liệu tác vụ đánh giá
+            continue
+        trace_file = run_file.with_name("trace.md")
+        trace = _clean_trace(trace_file.read_text(encoding="utf-8")) if trace_file.exists() else ""
+        checks = r.get("checks", [])
+        failed = [(c["name"], c.get("detail", "")) for c in checks if not c.get("passed")]
+        runs.append({"task": r["task"], "failed": failed, "passed": len(checks) - len(failed),
+                     "total": len(checks), "error": r.get("error"), "trace": trace[-TRACE_CHARS:]})
+
+    if not any(run["failed"] for run in runs):
+        print(f"WARNING: không có check thất bại ở tác vụ học trong {Path(results_dir, source_condition)}; "
+              "không gọi mô hình.")
+        return []
+
+    prompt = CURATOR_PROMPT.format(max_skills=max_skills, runs="\n\n".join(_render_run(run) for run in runs))
+    reply = (model or make_model()).invoke(prompt).text
+
+    written = []
+    for name, text in parse_skill_blocks(reply):
+        if len(written) >= max_skills:
+            print(f"skip {name!r}: đã đủ {max_skills} skill")
+            continue
+        problems = validate_skill(text, expected_name=name)
+        if problems:
+            print(f"skip {name!r}: {'; '.join(problems)}")
+            continue
+        path = out_dir / name / "SKILL.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text + "\n", encoding="utf-8")
+        written.append(path)
+    if not written:
+        print("WARNING: curator không ghi skill hợp lệ nào. Câu trả lời của mô hình:\n" + reply[:2000])
+    return written
+
+
+TRACE_CHARS = 6000
+
+CURATOR_PROMPT = """You write SKILLS for a coding and data-analysis agent that works in a sandbox with file tools and a shell.
+Below are runs of the agent on LEARNING tasks: the task statement, the checks it FAILED (name and the review bot's
+feedback, which states the rule that was broken), and the end of the execution trace.
+
+Find the general PROCESS mistakes and the organisation CONVENTIONS behind these failures (not the answers), and write
+at most {max_skills} short skills that would prevent them on NEW tasks of the same kinds (fixing a Python package with
+failing tests, answering exact questions from messy CSV/JSON data, turning log files into structured JSON).
+
+Rules:
+- A skill must be general: never mention task ids, the input data/code file names, function names, column names, or the
+  computed answers/numbers of a specific task.
+- When the feedback starts with "RULE:", it is an organisation convention that the task statement did NOT mention, and
+  the agent will NOT see it on a new task either: the skill is the only place where the agent can learn it. So write
+  each such convention as an unconditional imperative with ALL its concrete required details (required output file
+  names, headers, JSON keys and constant values, formats, sort orders, naming transformations). Never write "if a rule
+  requires ..." or "apply the conventions": that is useless because the agent does not know the rules.
+- Do not spend lines on what the agent already did right (the checks that passed); focus on what failed.
+- Each skill has a YAML frontmatter with `name` (lowercase letters, digits and hyphens) and `description` (one sentence
+  starting with "Use when ..." that names the broad kind of task, so the agent picks it for new tasks), then at most
+  40 lines of numbered imperative instructions that end with a short self-check list.
+- Prefer 2-3 focused skills over one long document. Do not repeat the same rule in several skills.
+- Output format, exactly:
+=== SKILL: <name> ===
+---
+name: <name>
+description: Use when ...
+---
+<instructions>
+=== END ===
+
+{runs}
+"""
+
+
+def _clean_trace(trace: str) -> str:
+    """Bỏ chuỗi mã hóa dài (ví dụ `signature` của Gemini) để phần vết đưa vào prompt chứa nội dung có ích."""
+    return re.sub(r"[A-Za-z0-9+/=_-]{200,}", "<...>", trace)
+
+
+def _render_run(run: dict) -> str:
+    instruction = get_task(run["task"]).instruction.strip()
+    failed = "\n".join(f"- {name}: {detail or '(no feedback)'}" for name, detail in run["failed"]) or "- (none)"
+    error = f"\nRun error: {run['error']}" if run["error"] else ""
+    return (f"## Learning task {run['task']} - passed {run['passed']}/{run['total']} checks{error}\n"
+            f"### Task statement\n{instruction}\n"
+            f"### Failed checks\n{failed}\n"
+            f"### End of trace\n{run['trace']}")
 
 
 if __name__ == "__main__":
