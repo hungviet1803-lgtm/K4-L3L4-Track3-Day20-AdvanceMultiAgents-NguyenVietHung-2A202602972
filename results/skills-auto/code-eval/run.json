@@ -1,0 +1,79 @@
+{
+  "task": "code-eval",
+  "condition": "skills-auto",
+  "role": "eval",
+  "error": null,
+  "timestamp": "2026-10-06T10:49:07.348859+00:00",
+  "skills_sha256": "90d3469e0afba97810d082560f94d9c9166a179c437af074f3cb70c885190914",
+  "seconds": 23.1,
+  "tokens": {
+    "input": 78706,
+    "output": 1746,
+    "total": 80452
+  },
+  "tool_calls": 25,
+  "subagent_calls": 0,
+  "skills_read": 1,
+  "skills_modified": false,
+  "final_message": "Fixed the `bookings` package so the documented behavior matches the implementation and the full test suite passes. Changed `workspace/bookings/timeutil.py`, `workspace/bookings/billing.py`, `workspace/bookings/schedule.py`, `workspace/bookings/calendar_export.py`, added `workspace/tests/test_regressions.py`, and updated `workspace/CHANGELOG.md` with the required unreleased fix notes.",
+  "score": 0.9090909090909091,
+  "passed": 10,
+  "total": 11,
+  "checks": [
+    {
+      "name": "visible_suite_passes",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "tests_not_modified",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "parse_duration_all_formats",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "other_caller_fixed",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "billable_blocks_round_up",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "add_slot_no_shared_state",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "negative_minutes_rejected",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "rule_type_hints",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "rule_regression_tests",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "rule_changelog",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "rule_version_bump",
+      "passed": false,
+      "detail": ""
+    }
+  ]
+}
